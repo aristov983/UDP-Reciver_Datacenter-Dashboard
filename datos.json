@@ -1,0 +1,11 @@
+{
+    "timestamp": "2025-09-17T19:41:41",
+    "mensaje": {
+        "disco":80,
+        "ilum": 80,
+        "puerta": 0,
+        "ruido": 50,
+        "temp": 20,
+        "fuego":0
+    }
+}
