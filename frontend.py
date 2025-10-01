@@ -177,37 +177,58 @@ class App(ctk.CTk):
             with open("datos.json", "r", encoding="utf-8") as archivo:
                 datos = json.load(archivo)
             mensaje = datos.get("mensaje", {})
-            # Nuevo formato esperado: mensaje contiene las claves
-            # disco, ilum, puerta, ruido, temp, fuego
-            # Mapeamos a las variables internas usadas por la UI.
+
             def safe_int(val, default=0):
                 try:
                     return int(val)
                 except (TypeError, ValueError):
                     return default
 
-            temperatura = safe_int(mensaje.get("temp", 0))
-            disk = safe_int(mensaje.get("disco", 0))
-            ruido = safe_int(mensaje.get("ruido", 0))
-            iluminacion = safe_int(mensaje.get("ilum", 0))
-            alarma_incendio = bool(safe_int(mensaje.get("fuego", 0)))
-            puerta_estado = "abierta" if safe_int(mensaje.get("puerta", 0)) == 1 else "cerrada"
+            # Validaciones de rango
+            temperatura = safe_int(mensaje.get("temp", None))
+            if temperatura is None or temperatura < 0 or temperatura > 140:
+                temperatura = None
+
+            disk = safe_int(mensaje.get("disco", None))
+            if disk is None or disk < 0 or disk > 100:
+                disk = None
+
+            ruido = safe_int(mensaje.get("ruido", None))
+            if ruido is None or ruido < 0 or ruido > 140:
+                ruido = None
+
+            iluminacion = safe_int(mensaje.get("ilum", None))
+            if iluminacion is None or iluminacion < 0 or iluminacion > 100:
+                iluminacion = None
+
+            fuego = safe_int(mensaje.get("fuego", None))
+            if fuego not in (0, 1):
+                alarma_incendio = None
+            else:
+                alarma_incendio = bool(fuego)
+
+            puerta = safe_int(mensaje.get("puerta", None))
+            if puerta not in (0, 1):
+                puerta_estado = None
+            else:
+                puerta_estado = "abierta" if puerta == 1 else "cerrada"
+
         except Exception as e:
             print("Error leyendo JSON:", e)
-            temperatura = disk = ruido = iluminacion = 0
-            alarma_incendio = False
-            puerta_estado = "cerrada"
+            temperatura = disk = ruido = iluminacion = None
+            alarma_incendio = None
+            puerta_estado = None
 
         valores = {
-            "temp": temperatura,
-            "disk": disk,
-            "ruido": ruido,
-            "iluminacion": iluminacion,
+            "temp": temperatura if temperatura is not None else "null",
+            "disk": disk if disk is not None else "null",
+            "ruido": ruido if ruido is not None else "null",
+            "iluminacion": iluminacion if iluminacion is not None else "null",
         }
 
         # Guardar valores en historial (máximo 50 puntos)
         for key in self.historial:
-            self.historial[key].append(valores[key])
+            self.historial[key].append(valores[key] if valores[key] != "null" else 0)
             if len(self.historial[key]) > 50:
                 self.historial[key].pop(0)
 
@@ -239,27 +260,29 @@ class App(ctk.CTk):
 
         # Actualizar botones con colores y textos
         self.botones["temp"].configure(
-            text=f"Temp: {valores['temp']}°C",
-            fg_color="red" if valores["temp"] > self.limites["temp"] else "green"
+            text=f"Temp: {valores['temp']}°C" if valores['temp'] != "null" else "Temp: null",
+            fg_color="red" if valores["temp"] != "null" and valores["temp"] > self.limites["temp"] else "green"
         )
         self.botones["disk"].configure(
-            text=f"Disco: {valores['disk']}%",
-            fg_color="red" if valores["disk"] > self.limites["disk"] else "green"
+            text=f"Disco: {valores['disk']}%" if valores['disk'] != "null" else "Disco: null",
+            fg_color="red" if valores["disk"] != "null" and valores["disk"] > self.limites["disk"] else "green"
         )
         self.botones["ruido"].configure(
-            text=f"Ruido: {valores['ruido']}",
-            fg_color="red" if valores["ruido"] > self.limites["ruido"] else "green"
+            text=f"Ruido: {valores['ruido']}" if valores['ruido'] != "null" else "Ruido: null",
+            fg_color="red" if valores["ruido"] != "null" and valores["ruido"] > self.limites["ruido"] else "green"
         )
         self.botones["iluminacion"].configure(
-            text=f"Iluminación: {valores['iluminacion']}",
-            fg_color="red" if valores["iluminacion"] > self.limites["iluminacion"] else "green"
+            text=f"Iluminación: {valores['iluminacion']}" if valores['iluminacion'] != "null" else "Iluminación: null",
+            fg_color="red" if valores["iluminacion"] != "null" and valores["iluminacion"] > self.limites["iluminacion"] else "green"
         )
 
         # Contar botones en rojo
         rojos = sum(1 for b in self.botones.values() if b.cget("fg_color") == "red")
 
         # Actualizar imagen del semáforo
-        if alarma_incendio:
+        if alarma_incendio is None:
+            self.status_label.configure(image=self.status_fatal_img)
+        elif alarma_incendio:
             self.status_label.configure(image=self.status_fatal_img)
         elif rojos == 0:
             self.status_label.configure(image=self.status_ok_img)
@@ -276,13 +299,17 @@ class App(ctk.CTk):
         self.wakeup_time.configure(state="readonly")
 
         # Actualizar botón de alarma de incendio
-        if alarma_incendio:
+        if alarma_incendio is None:
+            self.alarma_incendio_btn.configure(text="Alarma: null", fg_color="gray")
+        elif alarma_incendio:
             self.alarma_incendio_btn.configure(text="Alarma: ON", fg_color="red")
         else:
             self.alarma_incendio_btn.configure(text="Alarma: OFF", fg_color="green")
 
         # Actualizar botón de puerta
-        if puerta_estado == "abierta":
+        if puerta_estado is None:
+            self.puerta_estado_btn.configure(text="Puerta: null", fg_color="gray", image=self.puerta_cerrada_img)
+        elif puerta_estado == "abierta":
             self.puerta_estado_btn.configure(text="Puerta: Abierta", fg_color="red", image=self.puerta_abierta_img)
         else:
             self.puerta_estado_btn.configure(text="Puerta: Cerrada", fg_color="green", image=self.puerta_cerrada_img)
