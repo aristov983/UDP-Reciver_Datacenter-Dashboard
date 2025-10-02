@@ -1,11 +1,11 @@
 {
     "timestamp": "2025-10-01T19:46:17",
     "mensaje": {
-        "disco": -1,
-        "ilum": -1,
-        "puerta": -1,
-        "ruido": -1,
-        "temp": -1,
-        "fuego": -1
+        "disco": 60,
+        "ilum": 0,
+        "puerta": 0,
+        "ruido": 80,
+        "temp": 30,
+        "fuego": 0
     }
 }

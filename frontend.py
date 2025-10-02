@@ -3,16 +3,37 @@ from PIL import Image
 import json
 import time
 import random
+import os
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 INTERVALO = 3000
 
 class App(ctk.CTk):
+    def exportar_json_a_excel(self):
+        import pandas as pd
+        import tkinter.filedialog as fd
+        if not hasattr(self, 'historial_json') or not self.historial_json:
+            self.log_event("No hay historial de datos para exportar.")
+            return
+        df = pd.DataFrame(self.historial_json)
+        ruta = fd.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")], title="Guardar historial de datos.json")
+        if not ruta:
+            self.log_event("Exportación cancelada por el usuario.")
+            return
+        try:
+            df.to_excel(ruta, index=False)
+            self.log_event(f"Excel guardado en: {ruta}")
+        except Exception as e:
+            self.log_event(f"Error guardando Excel: {e}")
     def __init__(self):
         super().__init__()
         self.title("Datacenter Dashboard")
         self.geometry('1280x720')
+
+        # Historial de cambios de datos.json
+        self.historial_json = []
+        self._ultimo_snapshot_json = None
 
         #Inicializo tiempo activo:
         self.start_time = time.time()
@@ -42,6 +63,21 @@ class App(ctk.CTk):
         self.tabview.add("Seguridad y Logs")
         self.tabview.add("Configuración")
 
+#------------------- SEGURIDAD Y LOGS ------------------------------------
+        security_tab = self.tabview.tab("Seguridad y Logs")
+        security_tab.columnconfigure(1, weight=1)
+        security_tab.rowconfigure(1, weight=1)
+
+        security_label = ctk.CTkLabel(security_tab, text='Seguridad y logs')
+        for i in range(3):
+            security_label.columnconfigure(i, weight=1)
+        for i in range(3):
+            security_label.rowconfigure(i, weight=1)
+        security_label.grid(row=0, column=0, sticky='nsew')
+
+        xls_img = ctk.CTkImage(light_image=Image.open(r'assets/xls.png'), size=(64, 64))
+        generate_excel_btn = ctk.CTkButton(security_label, text="Generar excel", image=xls_img, corner_radius=24, compound="top", command=self.exportar_json_a_excel)
+        generate_excel_btn.grid(row=0, column=0, sticky='nsew')
 #------------------- GENERAL ---------------------------------------------
         general_tab = self.tabview.tab("General")
         for i in range(8):
@@ -159,6 +195,10 @@ class App(ctk.CTk):
         ctk.CTkLabel(config_tab, text="Máx. Iluminación:").grid(row=3, column=0, sticky="w", padx=10, pady=5)
         ctk.CTkEntry(config_tab, textvariable=self.max_iluminacion_var).grid(row=3, column=1, padx=10, pady=5)
 
+        # Variables para detectar cambios de estado
+        self.last_puerta_estado = None
+        self.last_alarma_incendio = None
+
         # Iniciar actualización periódica
         self.actualizar_datos()
 
@@ -177,6 +217,19 @@ class App(ctk.CTk):
             with open("datos.json", "r", encoding="utf-8") as archivo:
                 datos = json.load(archivo)
             mensaje = datos.get("mensaje", {})
+
+            # Guardar snapshot de datos.json y hora en historial_json solo si cambió
+            snapshot = json.dumps(datos, ensure_ascii=False, sort_keys=True)
+            if snapshot != self._ultimo_snapshot_json:
+                try:
+                    hora_mod = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.path.getmtime("datos.json")))
+                except Exception as e:
+                    hora_mod = "Error: " + str(e)
+                self.historial_json.append({
+                    "datos": snapshot,
+                    "hora_actualizacion": hora_mod
+                })
+                self._ultimo_snapshot_json = snapshot
 
             def safe_int(val, default=0):
                 try:
@@ -212,6 +265,21 @@ class App(ctk.CTk):
                 puerta_estado = None
             else:
                 puerta_estado = "abierta" if puerta == 1 else "cerrada"
+
+            # Registrar eventos de cambio de estado
+            if self.last_puerta_estado != puerta_estado and puerta_estado is not None:
+                if puerta_estado == "abierta":
+                    self.log_event("Puerta abierta")
+                elif puerta_estado == "cerrada":
+                    self.log_event("Puerta cerrada")
+                self.last_puerta_estado = puerta_estado
+
+            if self.last_alarma_incendio != alarma_incendio and alarma_incendio is not None:
+                if alarma_incendio:
+                    self.log_event("Alarma de incendio ACTIVADA")
+                else:
+                    self.log_event("Alarma de incendio DESACTIVADA")
+                self.last_alarma_incendio = alarma_incendio
 
         except Exception as e:
             print("Error leyendo JSON:", e)
